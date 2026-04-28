@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Capybara Evolution Clicker</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Google Fonts: Outfit & Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="game-container">
+        <!-- Header Stats -->
+        <header class="glass-panel main-stats">
+            <div class="stat-item">
+                <span data-i18n="score_label" class="label">Capybaras</span>
+                <div id="score" class="value">0</div>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+                <span data-i18n="dps_label" class="label">per second</span>
+                <div id="dps" class="value">0</div>
+            </div>
+        </header>
+
+        <!-- Main Click Area -->
+        <main class="main-click-area">
+            <div id="capybara-wrapper">
+                <img id="capybara-main" src="assets/capybara_v1.png" alt="Capybara">
+                <div id="click-particles"></div>
+            </div>
+            <div id="floating-texts"></div>
+        </main>
+
+        <!-- Shop & Controls -->
+        <section class="glass-panel controls-area">
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="upgrades" data-i18n="tab_upgrades">Upgrades</button>
+                <button class="tab-btn" data-tab="skins" data-i18n="tab_skins">Skins</button>
+                <button class="tab-btn" data-tab="settings" data-i18n="tab_settings">Settings</button>
+            </div>
+            
+            <div class="tab-content" id="upgrades-tab">
+                <div id="shop-list" class="scrollable">
+                    <!-- Upgrades will be injected here -->
+                </div>
+            </div>
+
+            <div class="tab-content hidden" id="skins-tab">
+                <div id="skin-list" class="scrollable grid">
+                    <!-- Skins will be injected here -->
+                </div>
+            </div>
+
+            <div class="tab-content hidden" id="settings-tab">
+                <div class="settings-list">
+                    <div class="setting-item">
+                        <span data-i18n="setting_lang">Language</span>
+                        <div class="lang-switch">
+                            <button onclick="game.toggleLanguage('ko')" id="lang-ko">KO</button>
+                            <button onclick="game.toggleLanguage('en')" id="lang-en">EN</button>
+                        </div>
+                    </div>
+                    <div class="setting-item">
+                        <span data-i18n="setting_reset">Game Reset</span>
+                        <button onclick="game.resetGame()" class="danger-btn" data-i18n="reset_btn">Reset</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer / Feedback -->
+        <footer id="footer-hint" data-i18n="footer_hint">
+            Tap the capybara to grow your family!
+        </footer>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>

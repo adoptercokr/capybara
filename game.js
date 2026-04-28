@@ -1,0 +1,295 @@
+const i18n = {
+    ko: {
+        score_label: "카피바라 가족",
+        dps_label: "초당 생산량",
+        tab_upgrades: "강화",
+        tab_skins: "스킨",
+        tab_settings: "설정",
+        setting_lang: "언어 설정",
+        setting_reset: "게임 초기화",
+        reset_btn: "초기화",
+        footer_hint: "카피바라를 터치하여 가족을 늘리세요!",
+        upgrade_1_name: "바쁜 손가락",
+        upgrade_1_desc: "클릭할 때마다 더 많은 카피바라를 데려옵니다.",
+        upgrade_2_name: "평화로운 들판",
+        upgrade_2_desc: "초당 1마리의 카피바라가 자동으로 합류합니다.",
+        upgrade_3_name: "맛있는 귤",
+        upgrade_3_desc: "카피바라들이 기분이 좋아져 생산량이 늘어납니다.",
+        upgrade_4_name: "카피바라 온천",
+        upgrade_4_desc: "힐링되는 온천 덕분에 가족이 빠르게 늘어납니다.",
+    },
+    en: {
+        score_label: "Capybaras",
+        dps_label: "per second",
+        tab_upgrades: "Upgrades",
+        tab_skins: "Skins",
+        tab_settings: "Settings",
+        setting_lang: "Language",
+        setting_reset: "Game Reset",
+        reset_btn: "Reset",
+        footer_hint: "Tap the capybara to grow your family!",
+        upgrade_1_name: "Busy Fingers",
+        upgrade_1_desc: "Bring more capybaras per click.",
+        upgrade_2_name: "Peaceful Field",
+        upgrade_2_desc: "1 capybara joins every second.",
+        upgrade_3_name: "Yummy Yuzu",
+        upgrade_3_desc: "Happy capybaras produce more.",
+        upgrade_4_name: "Capy Hot Spring",
+        upgrade_4_desc: "Relaxing atmosphere boosts growth rate.",
+    }
+};
+
+class CapybaraGame {
+    constructor() {
+        this.state = {
+            score: 0,
+            clickPower: 1,
+            dps: 0,
+            lang: 'ko',
+            currentSkin: 1,
+            unlockedSkins: [1],
+            upgrades: {
+                click: { level: 0, basePrice: 15, baseValue: 0.5, icon: '👆' },
+                auto1: { level: 0, basePrice: 100, baseValue: 1, icon: '🌾' },
+                auto2: { level: 0, basePrice: 1100, baseValue: 8, icon: '🍋' },
+                auto3: { level: 0, basePrice: 12000, baseValue: 47, icon: '♨️' }
+            }
+        };
+
+        this.skins = [
+            { id: 1, name: "Normal", milestone: 0, src: "assets/capybara_v1.png" },
+            { id: 2, name: "Golden", milestone: 5000, src: "assets/capybara_v2.png" }
+        ];
+
+        this.init();
+    }
+
+    init() {
+        this.loadGame();
+        this.bindEvents();
+        this.updateUI();
+        this.startAutoProduce();
+        this.applyLanguage();
+        this.checkSkins();
+    }
+
+    bindEvents() {
+        const clickArea = document.getElementById('capybara-wrapper');
+        clickArea.addEventListener('click', (e) => this.handleClick(e));
+
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => this.switchTab(e.target.dataset.tab));
+        });
+    }
+
+    handleClick(e) {
+        this.state.score += this.state.clickPower;
+        this.createFloatingText(e.clientX, e.clientY, `+${this.formatNumber(this.state.clickPower)}`);
+        this.updateUI();
+        this.checkSkins();
+        this.saveGame();
+    }
+
+    createFloatingText(x, y, text) {
+        const div = document.createElement('div');
+        div.className = 'floating-text';
+        div.style.left = `${x}px`;
+        div.style.top = `${y}px`;
+        div.innerText = text;
+        document.body.appendChild(div);
+
+        setTimeout(() => div.remove(), 800);
+    }
+
+    formatNumber(num) {
+        if (num < 1000) return Math.floor(num);
+        const suffixes = ['', 'K', 'M', 'B', 'T', 'P', 'E'];
+        const i = Math.floor(Math.log10(num) / 3);
+        const val = (num / Math.pow(1000, i)).toFixed(1);
+        return val + suffixes[i];
+    }
+
+    getPrice(type) {
+        const upgrade = this.state.upgrades[type];
+        return Math.floor(upgrade.basePrice * Math.pow(1.15, upgrade.level));
+    }
+
+    buyUpgrade(type) {
+        const price = this.getPrice(type);
+        const upgrade = this.state.upgrades[type];
+
+        if (this.state.score >= price) {
+            this.state.score -= price;
+            upgrade.level++;
+            
+            if (type === 'click') {
+                this.state.clickPower += upgrade.baseValue;
+            } else {
+                this.calculateDPS();
+            }
+
+            this.updateUI();
+            this.saveGame();
+        }
+    }
+
+    calculateDPS() {
+        let total = 0;
+        for (let key in this.state.upgrades) {
+            if (key !== 'click') {
+                total += this.state.upgrades[key].level * this.state.upgrades[key].baseValue;
+            }
+        }
+        this.state.dps = total;
+    }
+
+    checkSkins() {
+        this.skins.forEach(skin => {
+            if (this.state.score >= skin.milestone && !this.state.unlockedSkins.includes(skin.id)) {
+                this.state.unlockedSkins.push(skin.id);
+                this.showEvolutionMessage(skin.name);
+            }
+        });
+        
+        const currentSkinData = this.skins.find(s => s.id === this.state.currentSkin);
+        if (currentSkinData) {
+            document.getElementById('capybara-main').src = currentSkinData.src;
+        }
+    }
+
+    showEvolutionMessage(skinName) {
+        const msg = document.createElement('div');
+        msg.className = 'evolution-toast';
+        msg.innerText = this.state.lang === 'ko' ? `진화 완료: ${skinName}!` : `Evolved: ${skinName}!`;
+        document.body.appendChild(msg);
+        setTimeout(() => msg.remove(), 3000);
+    }
+
+    updateUI() {
+        document.getElementById('score').innerText = this.formatNumber(this.state.score);
+        document.getElementById('dps').innerText = this.formatNumber(this.state.dps);
+        this.renderShop();
+        this.renderSkins();
+    }
+
+    renderShop() {
+        const shopList = document.getElementById('shop-list');
+        shopList.innerHTML = '';
+
+        const upgradeKeys = [
+            { id: 'click', i18n: 'upgrade_1' },
+            { id: 'auto1', i18n: 'upgrade_2' },
+            { id: 'auto2', i18n: 'upgrade_3' },
+            { id: 'auto3', i18n: 'upgrade_4' }
+        ];
+
+        upgradeKeys.forEach(item => {
+            const up = this.state.upgrades[item.id];
+            const price = this.getPrice(item.id);
+            const canBuy = this.state.score >= price;
+
+            const div = document.createElement('div');
+            div.className = `upgrade-item ${!canBuy ? 'locked' : ''}`;
+            div.onclick = () => this.buyUpgrade(item.id);
+            
+            div.innerHTML = `
+                <div class="upgrade-icon">${up.icon}</div>
+                <div class="upgrade-info">
+                    <div class="upgrade-name">${i18n[this.state.lang][item.i18n + '_name']}</div>
+                    <div class="upgrade-desc">${i18n[this.state.lang][item.i18n + '_desc']}</div>
+                </div>
+                <div class="upgrade-cost">
+                    <div class="cost-value">🐾 ${this.formatNumber(price)}</div>
+                    <div class="upgrade-level">Lv. ${up.level}</div>
+                </div>
+            `;
+            shopList.appendChild(div);
+        });
+    }
+
+    renderSkins() {
+        const skinList = document.getElementById('skin-list');
+        if (!skinList) return;
+        skinList.innerHTML = '';
+
+        this.skins.forEach(skin => {
+            const isUnlocked = this.state.unlockedSkins.includes(skin.id);
+            const isActive = this.state.currentSkin === skin.id;
+
+            const div = document.createElement('div');
+            div.className = `skin-item ${!isUnlocked ? 'skin-locked' : ''} ${isActive ? 'skin-active' : ''}`;
+            if (isUnlocked) {
+                div.onclick = () => {
+                    this.state.currentSkin = skin.id;
+                    this.updateUI();
+                    this.checkSkins();
+                    this.saveGame();
+                };
+            }
+
+            div.innerHTML = `
+                <img src="${skin.src}" class="skin-preview">
+                <div class="skin-name">${skin.name}</div>
+            `;
+            skinList.appendChild(div);
+        });
+    }
+
+    switchTab(tabId) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+        document.getElementById(`${tabId}-tab`).classList.remove('hidden');
+        
+        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+        document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
+    }
+
+    toggleLanguage(lng) {
+        this.state.lang = lng;
+        this.applyLanguage();
+        this.updateUI();
+        this.saveGame();
+    }
+
+    applyLanguage() {
+        const texts = i18n[this.state.lang];
+        document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            if (texts[key]) el.innerText = texts[key];
+        });
+
+        // Toggle active class in settings
+        document.getElementById('lang-ko').className = this.state.lang === 'ko' ? 'active' : '';
+        document.getElementById('lang-en').className = this.state.lang === 'en' ? 'active' : '';
+    }
+
+    startAutoProduce() {
+        setInterval(() => {
+            if (this.state.dps > 0) {
+                this.state.score += (this.state.dps / 10);
+                this.updateUI();
+            }
+        }, 100);
+    }
+
+    saveGame() {
+        localStorage.setItem('capybara_save', JSON.stringify(this.state));
+    }
+
+    loadGame() {
+        const saved = localStorage.getItem('capybara_save');
+        if (saved) {
+            this.state = JSON.parse(saved);
+            this.calculateDPS();
+        }
+    }
+
+    resetGame() {
+        if (confirm(this.state.lang === 'ko' ? "정말 초기화하시겠습니까?" : "Are you sure you want to reset?")) {
+            localStorage.removeItem('capybara_save');
+            location.reload();
+        }
+    }
+}
+
+const game = new CapybaraGame();
+window.game = game; // Expose for HTML buttons
