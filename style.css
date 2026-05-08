@@ -38,9 +38,10 @@ body {
     width: 100%;
     max-width: 480px;
     height: 100vh;
+    height: 100dvh;
     display: flex;
     flex-direction: column;
-    padding: 20px;
+    padding: 15px 10px;
     position: relative;
 }
 
@@ -56,16 +57,17 @@ body {
 /* Stats Header */
 .main-stats {
     display: flex;
-    padding: 24px;
+    padding: 15px 10px;
     justify-content: space-around;
     align-items: center;
-    margin-bottom: 20px;
+    margin-bottom: 10px;
     animation: slideDown 0.8s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .stat-item {
     text-align: center;
     flex: 1;
+    min-width: 0;
 }
 
 .stat-item .label {
@@ -78,16 +80,20 @@ body {
 }
 
 .stat-item .value {
-    font-size: 32px;
+    font-size: clamp(18px, 6vw, 32px);
     font-weight: 700;
     color: var(--primary);
     text-shadow: 0 0 20px var(--primary-glow);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .stat-divider {
     width: 1px;
     height: 40px;
     background: var(--glass-border);
+    margin: 0 10px;
 }
 
 /* Main Click Area */
@@ -98,16 +104,23 @@ body {
     justify-content: center;
     align-items: center;
     position: relative;
+    min-height: 0;
+    padding: 10px 0;
 }
 
 #capybara-wrapper {
     position: relative;
     cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
 #capybara-main {
-    width: 260px;
-    height: 260px;
+    max-width: 90%;
+    max-height: 35vh;
+    width: auto;
+    height: auto;
     object-fit: contain;
     transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     filter: drop-shadow(0 20px 40px rgba(0,0,0,0.4));
@@ -119,7 +132,8 @@ body {
 
 /* Controls Area */
 .controls-area {
-    height: 40%;
+    flex: 1.2;
+    max-height: 50vh;
     display: flex;
     flex-direction: column;
     padding: 10px;
@@ -336,6 +350,20 @@ body {
     padding: 10px;
 }
 
+.evolution-guide-container {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--glass-border);
+}
+
+.evolution-guide-container h3 {
+    font-size: 14px;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
 .setting-item {
     display: flex;
     justify-content: space-between;
@@ -373,4 +401,8 @@ body {
     border-radius: 12px;
     font-weight: 700;
     cursor: pointer;
+}
+
+.hidden {
+    display: none !important;
 }

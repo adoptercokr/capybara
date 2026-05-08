@@ -1,41 +1,41 @@
 const i18n = {
     ko: {
         score_label: "카피바라 가족",
-        dps_label: "초당 생산량",
+        dps_label: "초당 자동 생산량",
         tab_upgrades: "강화",
-        tab_skins: "스킨",
         tab_settings: "설정",
         setting_lang: "언어 설정",
         setting_reset: "게임 초기화",
         reset_btn: "초기화",
+        evolution_title: "진화 가이드",
         footer_hint: "카피바라를 터치하여 가족을 늘리세요!",
         upgrade_1_name: "바쁜 손가락",
         upgrade_1_desc: "클릭할 때마다 더 많은 카피바라를 데려옵니다.",
         upgrade_2_name: "평화로운 들판",
         upgrade_2_desc: "초당 1마리의 카피바라가 자동으로 합류합니다.",
         upgrade_3_name: "맛있는 귤",
-        upgrade_3_desc: "카피바라들이 기분이 좋아져 생산량이 늘어납니다.",
+        upgrade_3_desc: "카피바라들이 기분이 좋아져 자동 생산량이 늘어납니다.",
         upgrade_4_name: "카피바라 온천",
-        upgrade_4_desc: "힐링되는 온천 덕분에 가족이 빠르게 늘어납니다.",
+        upgrade_4_desc: "힐링되는 온천 덕분에 자동 생산량이 크게 늘어납니다.",
     },
     en: {
         score_label: "Capybaras",
-        dps_label: "per second",
+        dps_label: "Auto per sec",
         tab_upgrades: "Upgrades",
-        tab_skins: "Skins",
         tab_settings: "Settings",
         setting_lang: "Language",
         setting_reset: "Game Reset",
         reset_btn: "Reset",
+        evolution_title: "Evolution Guide",
         footer_hint: "Tap the capybara to grow your family!",
         upgrade_1_name: "Busy Fingers",
         upgrade_1_desc: "Bring more capybaras per click.",
         upgrade_2_name: "Peaceful Field",
         upgrade_2_desc: "1 capybara joins every second.",
         upgrade_3_name: "Yummy Yuzu",
-        upgrade_3_desc: "Happy capybaras produce more.",
+        upgrade_3_desc: "Happy capybaras produce more automatically.",
         upgrade_4_name: "Capy Hot Spring",
-        upgrade_4_desc: "Relaxing atmosphere boosts growth rate.",
+        upgrade_4_desc: "Relaxing atmosphere boosts auto production rate.",
     }
 };
 
@@ -57,9 +57,18 @@ class CapybaraGame {
         };
 
         this.skins = [
-            { id: 1, name: "Normal", milestone: 0, src: "assets/capybara_v1.png" },
-            { id: 2, name: "Golden", milestone: 5000, src: "assets/capybara_v2.png" }
+            { id: 1, name: "Normal", milestone: 0, src: "assets/capy-1.png" },
+            { id: 2, name: "Evolved", milestone: 15000, src: "assets/capy-2.png" },
+            { id: 3, name: "Ultimate", milestone: 100000, src: "assets/capy-3.png" },
+            { id: 4, name: "Supreme", milestone: 1000000, src: "assets/capy-4.png" }
         ];
+
+        this.bgm = new Audio('assets/capy-bgm.mp3');
+        this.bgm.loop = true;
+        this.bgm.volume = 0.25;
+        this.sfx = new Audio('assets/capy-po.mp3');
+        this.sfx.volume = 0.8;
+        this.isBgmPlaying = false;
 
         this.init();
     }
@@ -67,6 +76,8 @@ class CapybaraGame {
     init() {
         this.loadGame();
         this.bindEvents();
+        this.renderShop();
+        this.renderEvolutionGuide();
         this.updateUI();
         this.startAutoProduce();
         this.applyLanguage();
@@ -78,11 +89,20 @@ class CapybaraGame {
         clickArea.addEventListener('click', (e) => this.handleClick(e));
 
         document.querySelectorAll('.tab-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => this.switchTab(e.target.dataset.tab));
+            btn.addEventListener('click', () => this.switchTab(btn.dataset.tab));
         });
     }
 
     handleClick(e) {
+        if (!this.isBgmPlaying) {
+            this.bgm.play().catch(err => console.log("BGM play error", err));
+            this.isBgmPlaying = true;
+        }
+        
+        const clickSound = this.sfx.cloneNode();
+        clickSound.volume = this.sfx.volume;
+        clickSound.play().catch(err => console.log("SFX play error", err));
+
         this.state.score += this.state.clickPower;
         this.createFloatingText(e.clientX, e.clientY, `+${this.formatNumber(this.state.clickPower)}`);
         this.updateUI();
@@ -102,11 +122,7 @@ class CapybaraGame {
     }
 
     formatNumber(num) {
-        if (num < 1000) return Math.floor(num);
-        const suffixes = ['', 'K', 'M', 'B', 'T', 'P', 'E'];
-        const i = Math.floor(Math.log10(num) / 3);
-        const val = (num / Math.pow(1000, i)).toFixed(1);
-        return val + suffixes[i];
+        return Math.floor(num).toLocaleString();
     }
 
     getPrice(type) {
@@ -147,6 +163,7 @@ class CapybaraGame {
         this.skins.forEach(skin => {
             if (this.state.score >= skin.milestone && !this.state.unlockedSkins.includes(skin.id)) {
                 this.state.unlockedSkins.push(skin.id);
+                this.state.currentSkin = skin.id;
                 this.showEvolutionMessage(skin.name);
             }
         });
@@ -168,8 +185,8 @@ class CapybaraGame {
     updateUI() {
         document.getElementById('score').innerText = this.formatNumber(this.state.score);
         document.getElementById('dps').innerText = this.formatNumber(this.state.dps);
-        this.renderShop();
-        this.renderSkins();
+        this.updateShopStatus();
+        this.updateEvolutionGuideStatus();
     }
 
     renderShop() {
@@ -185,11 +202,10 @@ class CapybaraGame {
 
         upgradeKeys.forEach(item => {
             const up = this.state.upgrades[item.id];
-            const price = this.getPrice(item.id);
-            const canBuy = this.state.score >= price;
-
+            
             const div = document.createElement('div');
-            div.className = `upgrade-item ${!canBuy ? 'locked' : ''}`;
+            div.className = `upgrade-item`;
+            div.id = `up-item-${item.id}`;
             div.onclick = () => this.buyUpgrade(item.id);
             
             div.innerHTML = `
@@ -199,39 +215,63 @@ class CapybaraGame {
                     <div class="upgrade-desc">${i18n[this.state.lang][item.i18n + '_desc']}</div>
                 </div>
                 <div class="upgrade-cost">
-                    <div class="cost-value">🐾 ${this.formatNumber(price)}</div>
-                    <div class="upgrade-level">Lv. ${up.level}</div>
+                    <div class="cost-value" id="up-cost-${item.id}"></div>
+                    <div class="upgrade-level" id="up-lvl-${item.id}"></div>
                 </div>
             `;
             shopList.appendChild(div);
         });
     }
 
-    renderSkins() {
-        const skinList = document.getElementById('skin-list');
-        if (!skinList) return;
-        skinList.innerHTML = '';
+    updateShopStatus() {
+        const upgradeKeys = ['click', 'auto1', 'auto2', 'auto3'];
+        upgradeKeys.forEach(id => {
+            const up = this.state.upgrades[id];
+            const price = this.getPrice(id);
+            const canBuy = this.state.score >= price;
+            
+            const itemEl = document.getElementById(`up-item-${id}`);
+            if (itemEl) {
+                if (canBuy) itemEl.classList.remove('locked');
+                else itemEl.classList.add('locked');
+            }
+            
+            const costEl = document.getElementById(`up-cost-${id}`);
+            if (costEl) costEl.innerText = `🐾 ${this.formatNumber(price)}`;
+            
+            const lvlEl = document.getElementById(`up-lvl-${id}`);
+            if (lvlEl) lvlEl.innerText = `Lv. ${up.level}`;
+        });
+    }
+
+    renderEvolutionGuide() {
+        const guideContainer = document.getElementById('evolution-guide');
+        if (!guideContainer) return;
+        guideContainer.innerHTML = '';
 
         this.skins.forEach(skin => {
-            const isUnlocked = this.state.unlockedSkins.includes(skin.id);
-            const isActive = this.state.currentSkin === skin.id;
+            const isUnlocked = this.state.score >= skin.milestone;
 
             const div = document.createElement('div');
-            div.className = `skin-item ${!isUnlocked ? 'skin-locked' : ''} ${isActive ? 'skin-active' : ''}`;
-            if (isUnlocked) {
-                div.onclick = () => {
-                    this.state.currentSkin = skin.id;
-                    this.updateUI();
-                    this.checkSkins();
-                    this.saveGame();
-                };
-            }
+            div.className = `skin-item ${!isUnlocked ? 'skin-locked' : 'skin-active'}`;
+            div.id = `guide-item-${skin.id}`;
 
             div.innerHTML = `
                 <img src="${skin.src}" class="skin-preview">
                 <div class="skin-name">${skin.name}</div>
+                <div class="upgrade-level">🐾 ${this.formatNumber(skin.milestone)}</div>
             `;
-            skinList.appendChild(div);
+            guideContainer.appendChild(div);
+        });
+    }
+
+    updateEvolutionGuideStatus() {
+        this.skins.forEach(skin => {
+            const isUnlocked = this.state.score >= skin.milestone;
+            const el = document.getElementById(`guide-item-${skin.id}`);
+            if (el) {
+                el.className = `skin-item ${!isUnlocked ? 'skin-locked' : 'skin-active'}`;
+            }
         });
     }
 
@@ -246,6 +286,8 @@ class CapybaraGame {
     toggleLanguage(lng) {
         this.state.lang = lng;
         this.applyLanguage();
+        this.renderShop();
+        this.renderEvolutionGuide();
         this.updateUI();
         this.saveGame();
     }
