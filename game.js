@@ -75,12 +75,16 @@ class CapybaraGame {
             return a;
         });
         this.sfxPoolIndex = 0;
+        this._lastSfx     = 0;       // pre-init to avoid undefined check in hot path
+        this._clickText   = '+1';    // pre-computed, updated only on upgrade
 
         this.init();
     }
 
     init() {
         this.loadGame();
+        // Sync cached click text with loaded save
+        this._clickText = `+${this.formatNumber(this.state.clickPower)}`;
         this.bindEvents();
         this.renderShop();
         this.renderEvolutionGuide();
@@ -127,16 +131,11 @@ class CapybaraGame {
         // NOTE: NO bgm 'pause' auto-resume listener — let system audio work naturally
     }
 
-    // Web Animations API — GPU layer, zero reflow, handles any tap speed
+    // 2-keyframe bounce — minimum GPU work per tap
     triggerBounce() {
         this._img.animate(
-            [
-                { transform: 'scale(1)',     offset: 0    },
-                { transform: 'scale(0.80)', offset: 0.35 },
-                { transform: 'scale(1.07)', offset: 0.70 },
-                { transform: 'scale(1)',     offset: 1    }
-            ],
-            { duration: 180, easing: 'ease-out', fill: 'none', composite: 'replace' }
+            [{ transform: 'scale(0.82)' }, { transform: 'scale(1)' }],
+            { duration: 150, easing: 'ease-out', fill: 'none', composite: 'replace' }
         );
     }
 
@@ -146,9 +145,9 @@ class CapybaraGame {
             this.isBgmPlaying = true;
         }
 
-        // SFX: throttle to ~16/sec max — audio decode blocks main thread on iOS
+        // SFX throttle: ~16/sec max
         const now = performance.now();
-        if (!this._lastSfx || now - this._lastSfx >= 60) {
+        if (now - this._lastSfx >= 60) {
             this._lastSfx = now;
             const sfx = this.sfxPool[this.sfxPoolIndex];
             this.sfxPoolIndex = (this.sfxPoolIndex + 1) % this.sfxPool.length;
@@ -158,10 +157,11 @@ class CapybaraGame {
 
         this.state.score += this.state.clickPower;
 
-        // Canvas float (on-demand RAF, not always running)
-        const rect = this._floatCanvas.getBoundingClientRect();
-        this.addFloat(e.clientX - rect.left, e.clientY - rect.top,
-                      `+${this.formatNumber(this.state.clickPower)}`);
+        // _cachedRect: pre-computed on resize, NEVER getBoundingClientRect() here
+        // _clickText:  pre-computed string, NEVER formatNumber() here
+        this.addFloat(e.clientX - this._cachedRect.left,
+                      e.clientY - this._cachedRect.top,
+                      this._clickText);
     }
 
     // MediaSession: registers as proper audio session (iOS/Android lock screen)
@@ -192,6 +192,8 @@ class CapybaraGame {
         const w = document.getElementById('capybara-wrapper');
         this._floatCanvas.width  = w.clientWidth  || 300;
         this._floatCanvas.height = w.clientHeight || 300;
+        // Cache rect so handleClick never calls getBoundingClientRect()
+        this._cachedRect = this._floatCanvas.getBoundingClientRect();
     }
 
     addFloat(x, y, text) {
@@ -234,8 +236,13 @@ class CapybaraGame {
 
 
 
-    formatNumber(num) {
-        return Math.floor(num).toLocaleString();
+    // Fast formatter — toLocaleString() takes 1-5ms on iOS, this is ~0ms
+    formatNumber(n) {
+        n = Math.floor(n);
+        if (n < 1000)       return String(n);
+        if (n < 1000000)    return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+        if (n < 1000000000) return (n / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
+        return (n / 1000000000).toFixed(1).replace(/\.0$/, '') + 'B';
     }
 
     getPrice(type) {
@@ -253,6 +260,8 @@ class CapybaraGame {
             
             if (type === 'click') {
                 this.state.clickPower += upgrade.baseValue;
+                // Invalidate cached click text
+                this._clickText = `+${this.formatNumber(this.state.clickPower)}`;
             } else {
                 this.calculateDPS();
             }
