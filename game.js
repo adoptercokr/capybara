@@ -88,20 +88,29 @@ class CapybaraGame {
         this.startAutoProduce();
         this.applyLanguage();
         this.checkSkins();
+        this.startPeriodicTasks(); // Decouple UI/save from tap events for smooth rapid touch
     }
 
     bindEvents() {
         const clickArea = document.getElementById('capybara-wrapper');
+        const img = document.getElementById('capybara-main');
 
-        // touchstart for instant mobile response + preventDefault to block double-tap zoom
+        // touchstart: instant response, preventDefault blocks double-tap zoom
         clickArea.addEventListener('touchstart', (e) => {
-            e.preventDefault(); // blocks double-tap zoom AND 300ms click delay
-            this.handleClick(e.touches[0]);
+            e.preventDefault();
+            img.classList.add('tapped');
+            // Handle all simultaneous touch points for multi-finger rapid tap
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                this.handleClick(e.changedTouches[i]);
+            }
         }, { passive: false });
 
-        // click fallback for desktop
+        clickArea.addEventListener('touchend', () => {
+            img.classList.remove('tapped');
+        }, { passive: true });
+
+        // Desktop click fallback
         clickArea.addEventListener('click', (e) => {
-            // Skip on touch devices (already handled by touchstart)
             if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
             this.handleClick(e);
         });
@@ -110,7 +119,7 @@ class CapybaraGame {
             btn.addEventListener('click', () => this.switchTab(btn.dataset.tab));
         });
 
-        // Resume BGM when user returns to the tab/app (mobile background suspend)
+        // Resume BGM when returning from background (iOS suspend)
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden && this.isBgmPlaying && this.bgm.paused) {
                 this.bgm.play().catch(() => {});
@@ -120,22 +129,26 @@ class CapybaraGame {
 
     handleClick(e) {
         if (!this.isBgmPlaying) {
-            this.bgm.play().catch(err => console.log("BGM play error", err));
+            this.bgm.play().catch(() => {});
             this.isBgmPlaying = true;
             this.startBgmWatchdog();
         }
 
-        // Round-robin SFX pool — no clone overhead on rapid taps
+        // SFX pool round-robin
         const sfx = this.sfxPool[this.sfxPoolIndex];
         this.sfxPoolIndex = (this.sfxPoolIndex + 1) % this.sfxPool.length;
         sfx.currentTime = 0;
         sfx.play().catch(() => {});
 
+        // Score only — UI/save are handled by periodic tasks (no main thread block)
         this.state.score += this.state.clickPower;
-        this.createFloatingText(e.clientX, e.clientY, `+${this.formatNumber(this.state.clickPower)}`);
-        this.updateUI();
-        this.checkSkins();
-        this.saveGame();
+
+        // Throttle floating text: max 1 per 80ms to avoid DOM flooding
+        const now = Date.now();
+        if (!this._lastFloatTime || now - this._lastFloatTime >= 80) {
+            this._lastFloatTime = now;
+            this.createFloatingText(e.clientX, e.clientY, `+${this.formatNumber(this.state.clickPower)}`);
+        }
     }
 
     startBgmWatchdog() {
@@ -347,10 +360,25 @@ class CapybaraGame {
         setInterval(() => {
             if (this.state.dps > 0) {
                 this.state.score += (this.state.dps / 10);
-                this.updateUI();
             }
         }, 100);
     }
+
+    // UI refresh and save run on their own timers — completely decoupled from tap events
+    startPeriodicTasks() {
+        // UI update: 100ms feels instant to the user, but doesn't block rapid taps
+        setInterval(() => {
+            this.updateUI();
+            this.checkSkins();
+        }, 100);
+
+        // Autosave every 3 seconds — localStorage writes are expensive
+        setInterval(() => {
+            this.saveGame();
+        }, 3000);
+    }
+
+
 
     saveGame() {
         localStorage.setItem('capybara_save', JSON.stringify(this.state));

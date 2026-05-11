@@ -127,9 +127,11 @@ body {
     filter: drop-shadow(0 20px 40px rgba(0,0,0,0.4));
 }
 
-#capybara-main:active {
+#capybara-main:active,
+#capybara-main.tapped {
     transform: scale(0.9);
 }
+
 
 /* Controls Area */
 .controls-area {
