@@ -66,9 +66,15 @@ class CapybaraGame {
         this.bgm = new Audio('assets/capy-bgm.mp3');
         this.bgm.loop = true;
         this.bgm.volume = 0.25;
-        this.sfx = new Audio('assets/capy-po.mp3');
-        this.sfx.volume = 0.8;
         this.isBgmPlaying = false;
+
+        // Pre-allocated SFX pool to prevent rapid-tap memory spikes
+        this.sfxPool = Array.from({ length: 5 }, () => {
+            const a = new Audio('assets/capy-po.mp3');
+            a.volume = 0.8;
+            return a;
+        });
+        this.sfxPoolIndex = 0;
 
         this.init();
     }
@@ -97,17 +103,31 @@ class CapybaraGame {
         if (!this.isBgmPlaying) {
             this.bgm.play().catch(err => console.log("BGM play error", err));
             this.isBgmPlaying = true;
+            this.startBgmWatchdog();
         }
-        
-        const clickSound = this.sfx.cloneNode();
-        clickSound.volume = this.sfx.volume;
-        clickSound.play().catch(err => console.log("SFX play error", err));
+
+        // Round-robin SFX pool — no clone overhead on rapid taps
+        const sfx = this.sfxPool[this.sfxPoolIndex];
+        this.sfxPoolIndex = (this.sfxPoolIndex + 1) % this.sfxPool.length;
+        sfx.currentTime = 0;
+        sfx.play().catch(() => {});
 
         this.state.score += this.state.clickPower;
         this.createFloatingText(e.clientX, e.clientY, `+${this.formatNumber(this.state.clickPower)}`);
         this.updateUI();
         this.checkSkins();
         this.saveGame();
+    }
+
+    startBgmWatchdog() {
+        // Mobile browsers sometimes silently stop looping audio — restart if detected
+        if (this._bgmWatchdog) return;
+        this._bgmWatchdog = setInterval(() => {
+            if (!this.isBgmPlaying) return;
+            if (this.bgm.paused || this.bgm.ended) {
+                this.bgm.play().catch(() => {});
+            }
+        }, 3000);
     }
 
     createFloatingText(x, y, text) {
