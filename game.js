@@ -92,10 +92,29 @@ class CapybaraGame {
 
     bindEvents() {
         const clickArea = document.getElementById('capybara-wrapper');
-        clickArea.addEventListener('click', (e) => this.handleClick(e));
+
+        // touchstart for instant mobile response + preventDefault to block double-tap zoom
+        clickArea.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // blocks double-tap zoom AND 300ms click delay
+            this.handleClick(e.touches[0]);
+        }, { passive: false });
+
+        // click fallback for desktop
+        clickArea.addEventListener('click', (e) => {
+            // Skip on touch devices (already handled by touchstart)
+            if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
+            this.handleClick(e);
+        });
 
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', () => this.switchTab(btn.dataset.tab));
+        });
+
+        // Resume BGM when user returns to the tab/app (mobile background suspend)
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && this.isBgmPlaying && this.bgm.paused) {
+                this.bgm.play().catch(() => {});
+            }
         });
     }
 

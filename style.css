@@ -19,6 +19,7 @@
     font-family: 'Outfit', sans-serif;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation; /* Prevents iOS double-tap zoom globally */
 }
 
 body {
@@ -443,7 +444,7 @@ body {
     }
     
     #capybara-main {
-        max-height: 28vh; /* Prevents overflow and squeezes on shorter screens */
+        max-height: 42vh; /* Larger capybara on mobile for better visibility */
     }
     
     .controls-area {
