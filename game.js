@@ -98,20 +98,24 @@ class CapybaraGame {
         // touchstart: instant response, preventDefault blocks double-tap zoom
         clickArea.addEventListener('touchstart', (e) => {
             e.preventDefault();
+
+            // Animation restart trick: remove → force reflow → re-add
+            // This makes EVERY rapid tap play its own independent bounce
+            img.classList.remove('tapped');
+            void img.offsetWidth; // triggers reflow, resets animation
             img.classList.add('tapped');
-            // Handle all simultaneous touch points for multi-finger rapid tap
+
             for (let i = 0; i < e.changedTouches.length; i++) {
                 this.handleClick(e.changedTouches[i]);
             }
         }, { passive: false });
 
-        clickArea.addEventListener('touchend', () => {
-            img.classList.remove('tapped');
-        }, { passive: true });
-
         // Desktop click fallback
         clickArea.addEventListener('click', (e) => {
             if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
+            img.classList.remove('tapped');
+            void img.offsetWidth;
+            img.classList.add('tapped');
             this.handleClick(e);
         });
 
@@ -140,15 +144,11 @@ class CapybaraGame {
         sfx.currentTime = 0;
         sfx.play().catch(() => {});
 
-        // Score only — UI/save are handled by periodic tasks (no main thread block)
+        // Score increment only — UI/save handled by periodic tasks
         this.state.score += this.state.clickPower;
 
-        // Throttle floating text: max 1 per 80ms to avoid DOM flooding
-        const now = Date.now();
-        if (!this._lastFloatTime || now - this._lastFloatTime >= 80) {
-            this._lastFloatTime = now;
-            this.createFloatingText(e.clientX, e.clientY, `+${this.formatNumber(this.state.clickPower)}`);
-        }
+        // Show +N on every tap — positioned relative to wrapper
+        this.createFloatingText(e.clientX, e.clientY, `+${this.formatNumber(this.state.clickPower)}`);
     }
 
     startBgmWatchdog() {
@@ -162,15 +162,19 @@ class CapybaraGame {
         }, 3000);
     }
 
-    createFloatingText(x, y, text) {
+    createFloatingText(clientX, clientY, text) {
+        const wrapper = document.getElementById('capybara-wrapper');
+        const rect = wrapper.getBoundingClientRect();
+
         const div = document.createElement('div');
         div.className = 'floating-text';
-        div.style.left = `${x}px`;
-        div.style.top = `${y}px`;
+        // Position relative to wrapper so it appears near the tap point
+        div.style.left = `${clientX - rect.left}px`;
+        div.style.top  = `${clientY - rect.top}px`;
         div.innerText = text;
-        document.body.appendChild(div);
+        wrapper.appendChild(div);
 
-        setTimeout(() => div.remove(), 800);
+        setTimeout(() => div.remove(), 700);
     }
 
     formatNumber(num) {

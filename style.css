@@ -115,7 +115,9 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
+    overflow: visible; /* Allow floating +N text to show outside image bounds */
 }
+
 
 #capybara-main {
     max-width: 90%;
@@ -123,13 +125,20 @@ body {
     width: auto;
     height: auto;
     object-fit: contain;
-    transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     filter: drop-shadow(0 20px 40px rgba(0,0,0,0.4));
+    /* No transition — animation handles tap feedback independently */
 }
 
-#capybara-main:active,
+/* Tap bounce: plays once per tap, restarts on rapid taps via JS reset trick */
+@keyframes capyTap {
+    0%   { transform: scale(1); }
+    35%  { transform: scale(0.82); }
+    70%  { transform: scale(1.06); }
+    100% { transform: scale(1); }
+}
+
 #capybara-main.tapped {
-    transform: scale(0.9);
+    animation: capyTap 0.18s ease-out forwards;
 }
 
 
@@ -256,15 +265,17 @@ body {
     color: var(--text-dim);
 }
 
-/* Floating Text Animation */
+/* Floating Text — positioned inside #capybara-wrapper, not body */
 .floating-text {
     position: absolute;
     color: var(--primary);
     font-weight: 800;
-    font-size: 24px;
+    font-size: clamp(18px, 5vw, 26px);
     pointer-events: none;
-    animation: floatUp 0.8s ease-out forwards;
+    animation: floatUp 0.65s ease-out forwards;
     z-index: 100;
+    white-space: nowrap;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.5);
 }
 
 @keyframes floatUp {
