@@ -68,15 +68,11 @@ class CapybaraGame {
         this.bgm.volume = 0.25;
         this.isBgmPlaying = false;
 
-        // Pre-allocated SFX pool to prevent rapid-tap memory spikes
-        this.sfxPool = Array.from({ length: 5 }, () => {
-            const a = new Audio('assets/capy-po.mp3');
-            a.volume = 0.8;
-            return a;
-        });
-        this.sfxPoolIndex = 0;
-        this._lastSfx     = 0;       // pre-init to avoid undefined check in hot path
-        this._clickText   = '+1';    // pre-computed, updated only on upgrade
+        // Web Audio API for SFX — pre-decoded buffer, zero decode overhead per tap
+        this._audioCtx  = null;  // created on first tap (iOS requires user gesture)
+        this._sfxBuffer = null;  // decoded once, reused forever
+        this._lastSfx   = 0;
+        this._clickText = '+1'; // pre-computed, updated only on upgrade
 
         this.init();
     }
@@ -143,25 +139,49 @@ class CapybaraGame {
         if (!this.isBgmPlaying) {
             this.bgm.play().catch(() => {});
             this.isBgmPlaying = true;
+            // Init Web Audio on first tap (iOS blocks AudioContext before user gesture)
+            this._initWebAudio();
         }
 
-        // SFX throttle: ~16/sec max
-        const now = performance.now();
-        if (now - this._lastSfx >= 60) {
-            this._lastSfx = now;
-            const sfx = this.sfxPool[this.sfxPoolIndex];
-            this.sfxPoolIndex = (this.sfxPoolIndex + 1) % this.sfxPool.length;
-            sfx.currentTime = 0;
-            sfx.play().catch(() => {});
-        }
+        this.playSfx();
 
         this.state.score += this.state.clickPower;
 
-        // _cachedRect: pre-computed on resize, NEVER getBoundingClientRect() here
-        // _clickText:  pre-computed string, NEVER formatNumber() here
-        this.addFloat(e.clientX - this._cachedRect.left,
-                      e.clientY - this._cachedRect.top,
-                      this._clickText);
+        // _cachedRect and _clickText are pre-computed — zero work here
+        this.addFloat(
+            e.clientX - this._cachedRect.left,
+            e.clientY - this._cachedRect.top,
+            this._clickText
+        );
+    }
+
+    // Create AudioContext + pre-decode SFX on first tap
+    _initWebAudio() {
+        try {
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            if (!Ctx) return;
+            this._audioCtx = new Ctx();
+            fetch('assets/capy-po.mp3')
+                .then(r  => r.arrayBuffer())
+                .then(ab => this._audioCtx.decodeAudioData(ab))
+                .then(decoded => { this._sfxBuffer = decoded; })
+                .catch(() => {});
+        } catch(err) {}
+    }
+
+    // Play pre-decoded buffer — ~0ms overhead, no MP3 decode per tap
+    playSfx() {
+        if (!this._sfxBuffer) return;  // not yet decoded, skip silently
+        const now = performance.now();
+        if (now - this._lastSfx < 60) return; // throttle ~16/sec
+        this._lastSfx = now;
+        try {
+            if (this._audioCtx.state === 'suspended') this._audioCtx.resume();
+            const src = this._audioCtx.createBufferSource();
+            src.buffer = this._sfxBuffer;
+            src.connect(this._audioCtx.destination);
+            src.start(0);
+        } catch(err) {}
     }
 
     // MediaSession: registers as proper audio session (iOS/Android lock screen)
@@ -178,14 +198,16 @@ class CapybaraGame {
         } catch(e) {}
     }
 
-    // ─── Canvas floating text — requestAnimationFrame loop, zero DOM per tap ──
+    // ─── Canvas floating text ─────────────────────────────────────────────────
     initFloatCanvas() {
         this._floatCanvas = document.getElementById('float-canvas');
         this._floatCtx    = this._floatCanvas.getContext('2d');
         this._floats      = [];
+        this._cachedRect  = { left: 0, top: 0 }; // safe default until layout settles
         this._resizeFC();
+        // Re-cache after layout settles — fixes +1 appearing at top-left on first open
+        setTimeout(() => this._resizeFC(), 300);
         window.addEventListener('resize', () => this._resizeFC());
-        this._rafFloats();
     }
 
     _resizeFC() {
