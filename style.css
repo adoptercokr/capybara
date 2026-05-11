@@ -406,3 +406,89 @@ body {
 .hidden {
     display: none !important;
 }
+
+/* Footer Hint */
+#footer-hint {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Mobile responsive layout optimizations */
+@media (max-width: 480px), (max-height: 850px) {
+    #game-container {
+        padding: 10px 8px;
+    }
+    
+    .main-stats {
+        padding: 10px 8px;
+        margin-bottom: 5px;
+        border-radius: 20px;
+    }
+    
+    .stat-divider {
+        height: 30px;
+    }
+    
+    .stat-item .label {
+        font-size: 10px;
+    }
+    
+    .main-click-area {
+        flex: 1.6; /* Give much more vertical space to the Capybara area */
+        padding: 15px 0;
+    }
+    
+    #capybara-main {
+        max-height: 28vh; /* Prevents overflow and squeezes on shorter screens */
+    }
+    
+    .controls-area {
+        flex: 0.9; /* Slightly scale down shop area height */
+        max-height: 40vh; /* Compacts the shop menu */
+        padding: 8px;
+        border-radius: 24px;
+    }
+    
+    .tabs {
+        margin-bottom: 8px;
+    }
+    
+    .tab-btn {
+        padding: 8px;
+        font-size: 13px;
+    }
+    
+    .upgrade-item {
+        padding: 10px 12px;
+        margin-bottom: 8px;
+        border-radius: 16px;
+    }
+    
+    .upgrade-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 20px;
+        margin-right: 10px;
+    }
+    
+    .upgrade-name {
+        font-size: 14px;
+    }
+    
+    .upgrade-desc {
+        font-size: 10px;
+    }
+    
+    .upgrade-cost {
+        font-size: 12px;
+    }
+    
+    #footer-hint {
+        font-size: 10px;
+        margin-top: 6px;
+    }
+}
