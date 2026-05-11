@@ -88,34 +88,27 @@ class CapybaraGame {
         this.startAutoProduce();
         this.applyLanguage();
         this.checkSkins();
-        this.startPeriodicTasks(); // Decouple UI/save from tap events for smooth rapid touch
+        this.initFloatCanvas();
+        this.startPeriodicTasks();
     }
 
     bindEvents() {
         const clickArea = document.getElementById('capybara-wrapper');
-        const img = document.getElementById('capybara-main');
+        this._img = document.getElementById('capybara-main');
 
-        // touchstart: instant response, preventDefault blocks double-tap zoom
+        // touchstart: instant response, no reflow, no class toggling
         clickArea.addEventListener('touchstart', (e) => {
             e.preventDefault();
-
-            // Animation restart trick: remove → force reflow → re-add
-            // This makes EVERY rapid tap play its own independent bounce
-            img.classList.remove('tapped');
-            void img.offsetWidth; // triggers reflow, resets animation
-            img.classList.add('tapped');
-
+            this.triggerBounce();
             for (let i = 0; i < e.changedTouches.length; i++) {
                 this.handleClick(e.changedTouches[i]);
             }
         }, { passive: false });
 
-        // Desktop click fallback
+        // Desktop fallback
         clickArea.addEventListener('click', (e) => {
             if (e.sourceCapabilities && e.sourceCapabilities.firesTouchEvents) return;
-            img.classList.remove('tapped');
-            void img.offsetWidth;
-            img.classList.add('tapped');
+            this.triggerBounce();
             this.handleClick(e);
         });
 
@@ -123,59 +116,115 @@ class CapybaraGame {
             btn.addEventListener('click', () => this.switchTab(btn.dataset.tab));
         });
 
-        // Resume BGM when returning from background (iOS suspend)
+        // BGM: auto-resume when returning from background
         document.addEventListener('visibilitychange', () => {
-            if (!document.hidden && this.isBgmPlaying && this.bgm.paused) {
-                this.bgm.play().catch(() => {});
+            if (!document.hidden && this.isBgmPlaying) {
+                setTimeout(() => this.bgm.play().catch(() => {}), 200);
             }
         });
+
+        // BGM: auto-resume if interrupted (call, Siri, etc.)
+        this.bgm.addEventListener('pause', () => {
+            if (this.isBgmPlaying && !document.hidden) {
+                setTimeout(() => this.bgm.play().catch(() => {}), 500);
+            }
+        });
+    }
+
+    // Web Animations API — GPU layer, zero reflow, handles any tap speed
+    triggerBounce() {
+        this._img.animate(
+            [
+                { transform: 'scale(1)',     offset: 0    },
+                { transform: 'scale(0.80)', offset: 0.35 },
+                { transform: 'scale(1.07)', offset: 0.70 },
+                { transform: 'scale(1)',     offset: 1    }
+            ],
+            { duration: 180, easing: 'ease-out', fill: 'none', composite: 'replace' }
+        );
     }
 
     handleClick(e) {
         if (!this.isBgmPlaying) {
             this.bgm.play().catch(() => {});
             this.isBgmPlaying = true;
-            this.startBgmWatchdog();
+            this.setupMediaSession();
         }
 
-        // SFX pool round-robin
+        // SFX pool round-robin — zero allocation per tap
         const sfx = this.sfxPool[this.sfxPoolIndex];
         this.sfxPoolIndex = (this.sfxPoolIndex + 1) % this.sfxPool.length;
         sfx.currentTime = 0;
         sfx.play().catch(() => {});
 
-        // Score increment only — UI/save handled by periodic tasks
         this.state.score += this.state.clickPower;
 
-        // Show +N on every tap — positioned relative to wrapper
-        this.createFloatingText(e.clientX, e.clientY, `+${this.formatNumber(this.state.clickPower)}`);
+        // Canvas float — zero DOM cost
+        const rect = this._floatCanvas.getBoundingClientRect();
+        this.addFloat(e.clientX - rect.left, e.clientY - rect.top,
+                      `+${this.formatNumber(this.state.clickPower)}`);
     }
 
-    startBgmWatchdog() {
-        // Mobile browsers sometimes silently stop looping audio — restart if detected
-        if (this._bgmWatchdog) return;
-        this._bgmWatchdog = setInterval(() => {
-            if (!this.isBgmPlaying) return;
-            if (this.bgm.paused || this.bgm.ended) {
-                this.bgm.play().catch(() => {});
-            }
-        }, 3000);
+    // MediaSession: registers as proper audio session (iOS/Android lock screen)
+    setupMediaSession() {
+        if (!('mediaSession' in navigator)) return;
+        try {
+            navigator.mediaSession.metadata = new MediaMetadata({
+                title: 'Capybara Evolution',
+                artist: 'Chill BGM',
+                album: 'Capy World'
+            });
+            navigator.mediaSession.setActionHandler('play',  () => this.bgm.play().catch(() => {}));
+            navigator.mediaSession.setActionHandler('pause', () => this.bgm.pause());
+        } catch(e) {}
     }
 
-    createFloatingText(clientX, clientY, text) {
-        const wrapper = document.getElementById('capybara-wrapper');
-        const rect = wrapper.getBoundingClientRect();
-
-        const div = document.createElement('div');
-        div.className = 'floating-text';
-        // Position relative to wrapper so it appears near the tap point
-        div.style.left = `${clientX - rect.left}px`;
-        div.style.top  = `${clientY - rect.top}px`;
-        div.innerText = text;
-        wrapper.appendChild(div);
-
-        setTimeout(() => div.remove(), 700);
+    // ─── Canvas floating text — requestAnimationFrame loop, zero DOM per tap ──
+    initFloatCanvas() {
+        this._floatCanvas = document.getElementById('float-canvas');
+        this._floatCtx    = this._floatCanvas.getContext('2d');
+        this._floats      = [];
+        this._resizeFC();
+        window.addEventListener('resize', () => this._resizeFC());
+        this._rafFloats();
     }
+
+    _resizeFC() {
+        const w = document.getElementById('capybara-wrapper');
+        this._floatCanvas.width  = w.clientWidth  || 300;
+        this._floatCanvas.height = w.clientHeight || 300;
+    }
+
+    addFloat(x, y, text) {
+        this._floats.push({ x, y, text, t: performance.now() });
+    }
+
+    _rafFloats() {
+        const ctx = this._floatCtx;
+        const DUR = 700;
+        const now = performance.now();
+        ctx.clearRect(0, 0, this._floatCanvas.width, this._floatCanvas.height);
+        ctx.textAlign  = 'center';
+        ctx.font       = 'bold 26px Outfit, sans-serif';
+        ctx.lineWidth  = 3;
+        ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+
+        this._floats = this._floats.filter(f => {
+            const p = (now - f.t) / DUR;
+            if (p >= 1) return false;
+            const alpha = 1 - p;
+            const yOff  = f.y - p * 90;
+            ctx.globalAlpha = alpha;
+            ctx.strokeText(f.text, f.x, yOff);   // outline for visibility
+            ctx.fillStyle = '#ffb347';
+            ctx.fillText(f.text, f.x, yOff);
+            return true;
+        });
+        ctx.globalAlpha = 1;
+        requestAnimationFrame(() => this._rafFloats());
+    }
+
+
 
     formatNumber(num) {
         return Math.floor(num).toLocaleString();
