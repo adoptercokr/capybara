@@ -116,19 +116,15 @@ class CapybaraGame {
             btn.addEventListener('click', () => this.switchTab(btn.dataset.tab));
         });
 
-        // BGM: auto-resume when returning from background
+        // BGM: pause when user leaves, resume when user returns
         document.addEventListener('visibilitychange', () => {
-            if (!document.hidden && this.isBgmPlaying) {
-                setTimeout(() => this.bgm.play().catch(() => {}), 200);
+            if (document.hidden) {
+                this.bgm.pause(); // Respect system audio when backgrounded
+            } else if (this.isBgmPlaying) {
+                setTimeout(() => this.bgm.play().catch(() => {}), 100);
             }
         });
-
-        // BGM: auto-resume if interrupted (call, Siri, etc.)
-        this.bgm.addEventListener('pause', () => {
-            if (this.isBgmPlaying && !document.hidden) {
-                setTimeout(() => this.bgm.play().catch(() => {}), 500);
-            }
-        });
+        // NOTE: NO bgm 'pause' auto-resume listener — let system audio work naturally
     }
 
     // Web Animations API — GPU layer, zero reflow, handles any tap speed
@@ -148,18 +144,21 @@ class CapybaraGame {
         if (!this.isBgmPlaying) {
             this.bgm.play().catch(() => {});
             this.isBgmPlaying = true;
-            this.setupMediaSession();
         }
 
-        // SFX pool round-robin — zero allocation per tap
-        const sfx = this.sfxPool[this.sfxPoolIndex];
-        this.sfxPoolIndex = (this.sfxPoolIndex + 1) % this.sfxPool.length;
-        sfx.currentTime = 0;
-        sfx.play().catch(() => {});
+        // SFX: throttle to ~16/sec max — audio decode blocks main thread on iOS
+        const now = performance.now();
+        if (!this._lastSfx || now - this._lastSfx >= 60) {
+            this._lastSfx = now;
+            const sfx = this.sfxPool[this.sfxPoolIndex];
+            this.sfxPoolIndex = (this.sfxPoolIndex + 1) % this.sfxPool.length;
+            sfx.currentTime = 0;
+            sfx.play().catch(() => {});
+        }
 
         this.state.score += this.state.clickPower;
 
-        // Canvas float — zero DOM cost
+        // Canvas float (on-demand RAF, not always running)
         const rect = this._floatCanvas.getBoundingClientRect();
         this.addFloat(e.clientX - rect.left, e.clientY - rect.top,
                       `+${this.formatNumber(this.state.clickPower)}`);
@@ -197,27 +196,36 @@ class CapybaraGame {
 
     addFloat(x, y, text) {
         this._floats.push({ x, y, text, t: performance.now() });
+        // Start RAF only when there's something to draw — stops when idle
+        if (!this._rafActive) {
+            this._rafActive = true;
+            requestAnimationFrame(() => this._rafFloats());
+        }
     }
 
     _rafFloats() {
         const ctx = this._floatCtx;
-        const DUR = 700;
+        const DUR = 600;
         const now = performance.now();
         ctx.clearRect(0, 0, this._floatCanvas.width, this._floatCanvas.height);
-        ctx.textAlign  = 'center';
-        ctx.font       = 'bold 26px Outfit, sans-serif';
-        ctx.lineWidth  = 3;
-        ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+
+        if (this._floats.length === 0) {
+            this._rafActive = false;
+            return; // Stop loop — no CPU wasted when idle
+        }
+
+        ctx.textAlign   = 'center';
+        ctx.font        = 'bold 26px Outfit, sans-serif';
+        ctx.lineWidth   = 3;
+        ctx.strokeStyle = 'rgba(0,0,0,0.5)';
 
         this._floats = this._floats.filter(f => {
             const p = (now - f.t) / DUR;
             if (p >= 1) return false;
-            const alpha = 1 - p;
-            const yOff  = f.y - p * 90;
-            ctx.globalAlpha = alpha;
-            ctx.strokeText(f.text, f.x, yOff);   // outline for visibility
+            ctx.globalAlpha = 1 - p;
+            ctx.strokeText(f.text, f.x, f.y - p * 80);
             ctx.fillStyle = '#ffb347';
-            ctx.fillText(f.text, f.x, yOff);
+            ctx.fillText(f.text,  f.x, f.y - p * 80);
             return true;
         });
         ctx.globalAlpha = 1;
@@ -419,13 +427,13 @@ class CapybaraGame {
 
     // UI refresh and save run on their own timers — completely decoupled from tap events
     startPeriodicTasks() {
-        // UI update: 100ms feels instant to the user, but doesn't block rapid taps
+        // 200ms: fast enough to feel instant, half the DOM load of 100ms
         setInterval(() => {
             this.updateUI();
             this.checkSkins();
-        }, 100);
+        }, 200);
 
-        // Autosave every 3 seconds — localStorage writes are expensive
+        // Autosave every 3 seconds
         setInterval(() => {
             this.saveGame();
         }, 3000);

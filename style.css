@@ -126,6 +126,8 @@ body {
     height: auto;
     object-fit: contain;
     filter: drop-shadow(0 20px 40px rgba(0,0,0,0.4));
+    -webkit-user-drag: none;
+    user-drag: none;
     /* Bounce handled by Web Animations API in JS */
 }
 
